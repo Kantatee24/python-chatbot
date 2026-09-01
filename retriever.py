@@ -2,9 +2,9 @@ import re
 import pandas as pd
 from pathlib import Path
 
-CHUNK_SIZE = 800
-CHUNK_OVERLAP = 100
-PDF_TOP_K = 3
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 80
+PDF_TOP_K = 2
 EXCEL_TOP_K = 3
 
 

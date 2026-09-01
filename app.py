@@ -98,7 +98,7 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     ))
 
     with st.spinner("กำลังคิด..."):
-        chat = client.chats.create(model="gemini-3.5-flash-lite", config=CHAT_CONFIG, history=history)
+        chat = client.chats.create(model="gemini-flash-lite-latest", config=CHAT_CONFIG, history=history)
         response = chat.send_message(user_input)
 
     st.session_state["messages"].append({"role": "model", "content": response.text})
