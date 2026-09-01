@@ -1,0 +1,5 @@
+.env
+python_data.pdf
+__pycache__/
+*.pyc
+.DS_Store
