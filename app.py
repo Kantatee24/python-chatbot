@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
 from prompt import PROMPT_PYBOT
-from retriever import load_chunks, load_qa, search
+from retriever import load_chunks, load_qa, build_heading_index, search
 
 load_dotenv()
 
@@ -35,10 +35,10 @@ CHAT_CONFIG = types.GenerateContentConfig(
 BASE_DIR = os.path.dirname(__file__)
 
 
-def expand_query(query: str, chunks: list, qa_rows: list) -> str:
+def expand_query(query: str, chunks: list, heading_index: list, qa_rows: list) -> str:
     """ค้นหาเบื้องต้นก่อน แล้วให้ Gemini ดึง 2-3 keyword จากเนื้อหาในหนังสือ"""
     try:
-        initial_context = search(query, chunks, qa_rows)
+        initial_context = search(query, chunks, heading_index, qa_rows)
         result = client.models.generate_content(
             model="gemini-3.5-flash-lite",
             contents=(
@@ -66,6 +66,11 @@ def get_qa():
     return load_qa(os.path.join(BASE_DIR, "python_qa.xlsx"))
 
 
+@st.cache_data(show_spinner=False)
+def get_heading_index():
+    return build_heading_index(get_chunks())
+
+
 def clear_history():
     st.session_state["messages"] = [
         {"role": "model", "content": "สวัสดีครับ! ผม PyBot ผู้ช่วยเรียน Python จากหนังสือ Python MSU ครับ สอบถามเรื่องใดได้เลยครับ 🐍"}
@@ -88,6 +93,7 @@ with st.sidebar:
 
 chunks = get_chunks()
 qa_rows = get_qa()
+heading_index = get_heading_index()
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
@@ -101,8 +107,8 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     st.session_state["messages"].append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    expanded = expand_query(user_input, chunks, qa_rows)
-    relevant_context = search(expanded, chunks, qa_rows)
+    expanded = expand_query(user_input, chunks, heading_index, qa_rows)
+    relevant_context = search(expanded, chunks, heading_index, qa_rows)
 
     history = []
     for msg in st.session_state["messages"][:-1]:

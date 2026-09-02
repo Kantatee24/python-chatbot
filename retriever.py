@@ -7,20 +7,28 @@ CHUNK_OVERLAP = 80
 PDF_TOP_K = 4
 EXCEL_TOP_K = 3
 
-# Python keywords — ถ้า query มีคำเหล่านี้ให้ boost คะแนน
 PY_KEYWORDS = {
     "if", "else", "elif", "for", "while", "def", "class", "return",
     "import", "from", "try", "except", "with", "as", "and", "or", "not",
     "in", "is", "lambda", "pass", "break", "continue", "yield", "global",
     "print", "list", "dict", "tuple", "set", "range", "len", "type",
     "str", "int", "float", "bool", "none", "true", "false", "input",
-    "open", "file", "append", "remove", "sort", "map", "filter", "zip",
+    "open", "append", "remove", "sort", "map", "filter", "zip",
 }
 
 
+def clean_thai(text: str) -> str:
+    """แก้ encoding artifact จาก PDF: [พยัญชนะ][space][สระา] → [พยัญชนะ][สระำ]"""
+    # fix sara am (ำ) ที่ถูก encode เป็น space + sara aa (า)
+    text = re.sub(r'([ก-ฮ]) า', r'\1ำ', text)
+    # fix vowel marks อื่นที่หลุด space
+    text = re.sub(r'([ก-ฮ]) ([ัิ-ู็-๎])', r'\1\2', text)
+    return text
+
+
 def load_chunks(md_path: str) -> list[str]:
-    """Split Markdown by headings first, then by word count if section too long."""
     text = Path(md_path).read_text(encoding="utf-8")
+    text = clean_thai(text)                          # fix encoding ก่อน
     raw_sections = re.split(r'\n(?=#{1,3} )', text)
     chunks = []
     for section in raw_sections:
@@ -31,11 +39,28 @@ def load_chunks(md_path: str) -> list[str]:
         if len(words) <= CHUNK_SIZE:
             chunks.append(section)
         else:
+            # เก็บ heading ไว้ใน sub-chunk ด้วย
+            heading_line = section.split('\n')[0]
             i = 0
             while i < len(words):
-                chunks.append(" ".join(words[i : i + CHUNK_SIZE]))
+                sub = " ".join(words[i: i + CHUNK_SIZE])
+                if i > 0:
+                    sub = heading_line + "\n" + sub   # แนบ heading ทุก sub-chunk
+                chunks.append(sub)
                 i += CHUNK_SIZE - CHUNK_OVERLAP
     return chunks
+
+
+def build_heading_index(chunks: list[str]) -> list[dict]:
+    """สร้าง index ของ heading แต่ละ chunk สำหรับค้นหา precision สูง"""
+    index = []
+    for i, chunk in enumerate(chunks):
+        first_line = chunk.split('\n')[0].strip()
+        m = re.match(r'^#{1,3}\s+(.+)', first_line)
+        if m:
+            heading = re.sub(r'\*+|_+', '', m.group(1)).strip()
+            index.append({"heading": heading, "chunk_idx": i})
+    return index
 
 
 def load_qa(xlsx_path: str) -> list[dict]:
@@ -54,7 +79,6 @@ def load_qa(xlsx_path: str) -> list[dict]:
 def _score(query: str, text: str) -> float:
     q_words = set(re.findall(r"\w+", query.lower()))
     t_words = set(re.findall(r"\w+", text.lower()))
-
     score = float(len(q_words & t_words))
 
     # boost ถ้า heading ของ chunk ตรงกับ query
@@ -63,49 +87,65 @@ def _score(query: str, text: str) -> float:
         h_words = set(re.findall(r"\w+", heading.group(1).lower()))
         score += len(q_words & h_words) * 4
 
-    # boost สำหรับ Python keywords ที่ตรงกัน
-    py_in_query = q_words & PY_KEYWORDS
-    py_in_text = t_words & PY_KEYWORDS
-    score += len(py_in_query & py_in_text) * 3
+    # boost Python keywords
+    py_in_q = q_words & PY_KEYWORDS
+    py_in_t = t_words & PY_KEYWORDS
+    score += len(py_in_q & py_in_t) * 3
 
     return score
 
 
 def search_qa(query: str, qa_rows: list[dict], top_k: int = EXCEL_TOP_K) -> str:
+    clean_q = clean_thai(query)
     scores = []
     for i, row in enumerate(qa_rows):
         score = (
-            _score(query, row["question"]) * 3
-            + _score(query, row["keywords"]) * 2
-            + _score(query, row["topic"])
+            _score(clean_q, row["question"]) * 3
+            + _score(clean_q, row["keywords"]) * 2
+            + _score(clean_q, row["topic"])
         )
         scores.append((score, i))
     scores.sort(reverse=True)
     best = [(s, i) for s, i in scores[:top_k] if s > 0]
     if not best:
         return ""
-    parts = []
-    for _, i in best:
-        r = qa_rows[i]
-        parts.append(f"Q: {r['question']}\nA: {r['answer']}")
+    parts = [f"Q: {qa_rows[i]['question']}\nA: {qa_rows[i]['answer']}" for _, i in best]
     return "\n\n".join(parts)
 
 
-def search_pdf(query: str, chunks: list[str], top_k: int = PDF_TOP_K) -> str:
-    scores = [(round(_score(query, c), 2), i) for i, c in enumerate(chunks)]
-    scores.sort(reverse=True)
+def search_pdf(query: str, chunks: list[str], heading_index: list[dict],
+               top_k: int = PDF_TOP_K) -> str:
+    clean_q = clean_thai(query)
 
-    # เอา top_k ที่ score > 0 ก่อน ถ้าไม่มีเลยให้เอา top 2 มาเลย
-    top = [chunks[i] for s, i in scores[:top_k] if s > 0]
-    if not top:
-        top = [chunks[i] for _, i in scores[:2]]
+    # 1. ค้นหา heading ก่อน (precision สูง)
+    h_scores = [(round(_score(clean_q, h["heading"]), 2), h["chunk_idx"])
+                for h in heading_index]
+    h_scores.sort(reverse=True)
+    seen = set()
+    heading_chunks = []
+    for s, i in h_scores:
+        if s > 0 and i not in seen:
+            heading_chunks.append(chunks[i])
+            seen.add(i)
+        if len(heading_chunks) >= 2:
+            break
 
-    return "\n\n---\n\n".join(top)
+    # 2. ค้นหา chunk ทั่วไป (recall สูง)
+    c_scores = [(round(_score(clean_q, c), 2), i) for i, c in enumerate(chunks)]
+    c_scores.sort(reverse=True)
+    extra = [chunks[i] for s, i in c_scores if s > 0 and i not in seen][: top_k - len(heading_chunks)]
+
+    result = heading_chunks + extra
+    if not result:
+        result = [chunks[i] for _, i in c_scores[:2]]
+
+    return "\n\n---\n\n".join(result)
 
 
-def search(query: str, chunks: list[str], qa_rows: list[dict]) -> str:
+def search(query: str, chunks: list[str], heading_index: list[dict],
+           qa_rows: list[dict]) -> str:
     qa_result = search_qa(query, qa_rows)
-    pdf_result = search_pdf(query, chunks)
+    pdf_result = search_pdf(query, chunks, heading_index)
     parts = []
     if qa_result:
         parts.append(f"[จาก Q&A Excel]\n{qa_result}")
