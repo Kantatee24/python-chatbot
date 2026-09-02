@@ -35,6 +35,25 @@ CHAT_CONFIG = types.GenerateContentConfig(
 BASE_DIR = os.path.dirname(__file__)
 
 
+def expand_query(query: str) -> str:
+    """ใช้ Gemini แปลง query เป็น keywords เพิ่มเติมสำหรับค้นหา"""
+    try:
+        result = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=(
+                f'จากคำถาม: "{query}"\n'
+                f"สร้าง keywords ภาษาไทยและอังกฤษที่เกี่ยวข้อง 8-12 คำ "
+                f"ที่น่าจะปรากฏในหนังสือสอน Python เช่น ชื่อคำสั่ง ชื่อแนวคิด คำอธิบาย\n"
+                f"ตอบเฉพาะ keywords คั่นด้วย space เท่านั้น ห้ามอธิบาย"
+            ),
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=80),
+        )
+        keywords = result.text.strip().replace("\n", " ")
+        return f"{query} {keywords}"
+    except Exception:
+        return query
+
+
 @st.cache_data(show_spinner="กำลังโหลดหนังสือ Python...")
 def get_chunks():
     return load_chunks(os.path.join(BASE_DIR, "python_data.md"))
@@ -80,7 +99,8 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     st.session_state["messages"].append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    relevant_context = search(user_input, chunks, qa_rows)
+    expanded = expand_query(user_input)
+    relevant_context = search(expanded, chunks, qa_rows)
 
     history = []
     for msg in st.session_state["messages"][:-1]:
