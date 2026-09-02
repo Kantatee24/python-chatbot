@@ -98,8 +98,10 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     ))
 
     with st.spinner("กำลังคิด..."):
-        chat = client.chats.create(model="gemini-2.0-flash-lite", config=CHAT_CONFIG, history=history)
-        response = chat.send_message(user_input)
-
-    st.session_state["messages"].append({"role": "model", "content": response.text})
-    st.chat_message("model").write(response.text)
+        try:
+            chat = client.chats.create(model="gemini-2.0-flash-lite", config=CHAT_CONFIG, history=history)
+            response = chat.send_message(user_input)
+            st.session_state["messages"].append({"role": "model", "content": response.text})
+            st.chat_message("model").write(response.text)
+        except Exception as e:
+            st.error(f"❌ Gemini API Error: {e}")
