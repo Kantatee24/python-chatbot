@@ -102,7 +102,7 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
 
     with st.spinner("กำลังคิด..."):
         response = None
-        models = ["gemini-3.5-flash-lite", "gemini-2.5-flash"]
+        models = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
         for model in models:
             for attempt in range(3):
                 try:
