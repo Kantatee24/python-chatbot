@@ -102,19 +102,23 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
 
     with st.spinner("กำลังคิด..."):
         response = None
-        for attempt in range(3):
-            try:
-                chat = client.chats.create(model="gemini-3.5-flash-lite", config=CHAT_CONFIG, history=history)
-                response = chat.send_message(user_input)
+        models = ["gemini-3.5-flash-lite", "gemini-2.5-flash"]
+        for model in models:
+            for attempt in range(3):
+                try:
+                    chat = client.chats.create(model=model, config=CHAT_CONFIG, history=history)
+                    response = chat.send_message(user_input)
+                    break
+                except errors.ServerError:
+                    if attempt < 2:
+                        time.sleep(7)
+                except Exception as e:
+                    st.error(f"❌ Gemini API Error: {e}")
+                    break
+            if response:
                 break
-            except errors.ServerError:
-                if attempt < 2:
-                    time.sleep(3)
-                else:
-                    st.warning("⚠️ เซิร์ฟเวอร์ Gemini ยุ่งอยู่ชั่วคราว กรุณาลองใหม่อีกครั้งครับ")
-            except Exception as e:
-                st.error(f"❌ Gemini API Error: {e}")
-                break
+        if not response:
+            st.warning("⚠️ เซิร์ฟเวอร์ Gemini ยุ่งมากในขณะนี้ กรุณาลองใหม่สักครู่ครับ")
         if response:
             st.session_state["messages"].append({"role": "model", "content": response.text})
             st.chat_message("model").write(response.text)
