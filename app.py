@@ -36,17 +36,20 @@ BASE_DIR = os.path.dirname(__file__)
 
 
 def normalize_query(query: str) -> str:
-    """แก้ typo และแปลง query เป็น Python keyword ที่ถูกต้อง"""
+    """แก้ typo + แปลง Python keyword เป็นคำไทยที่เกี่ยวข้อง เพื่อค้น heading ภาษาไทยได้"""
     try:
         result = client.models.generate_content(
             model="gemini-3.5-flash-lite",
             contents=(
                 f"คำถามเกี่ยวกับ Python: '{query}'\n"
-                f"งาน: แก้ typo และดึง Python keyword หลักออกมา\n"
-                f"ตัวอย่าง: 'while lopp' → 'while loop', 'deff ฟังก์ชัน' → 'def function'\n"
-                f"ตอบเฉพาะ keywords ที่แก้แล้ว 1-4 คำ คั่นด้วย space ห้ามอธิบาย"
+                f"งาน: แก้ typo, ดึง Python keyword ที่ถูกต้อง, และแปลงเป็นคำภาษาไทยที่เกี่ยวข้อง\n"
+                f"ตัวอย่าง:\n"
+                f"  'while lopp' → 'while loop วนซ้ำ'\n"
+                f"  'if else เขียนยังไง' → 'if else เงื่อนไข การเลือก'\n"
+                f"  'ฟังก์ชัน' → 'function def นิยาม'\n"
+                f"ตอบเฉพาะ keywords 2-5 คำ คั่นด้วย space ห้ามอธิบาย"
             ),
-            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=20),
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=30),
         )
         normalized = result.text.strip().replace("\n", " ")
         return f"{query} {normalized}"
@@ -63,8 +66,8 @@ def expand_query(query: str, chunks: list, heading_index: list, qa_rows: list) -
             contents=(
                 f"เนื้อหาจากหนังสือ Python MSU:\n{initial_context[:1500]}\n\n"
                 f"คำถาม: {query}\n\n"
-                f"จากเนื้อหาข้างต้นเท่านั้น ดึง keywords ที่มีในเนื้อหานั้น 2-3 คำ "
-                f"เพื่อช่วยค้นหาส่วนที่เกี่ยวข้องมากขึ้น\n"
+                f"ดึง keywords ภาษาไทยและอังกฤษที่เกี่ยวข้องกับ Python concept นี้ 2-3 คำ "
+                f"เพื่อช่วยค้นหาในหนังสือ (ใช้ความรู้ทั่วไปได้ ไม่ต้องจำกัดแค่เนื้อหาข้างบน)\n"
                 f"ตอบเฉพาะ keywords คั่นด้วย space เท่านั้น ห้ามอธิบาย"
             ),
             config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=20),
