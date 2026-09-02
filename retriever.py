@@ -6,7 +6,15 @@ from pathlib import Path
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 80
 PDF_TOP_K = 4
-EXCEL_TOP_K = 3
+EXCEL_TOP_K = 5
+
+# คำถามทั่วไปที่ไม่ช่วย discriminate — ตัดออกจาก score
+THAI_STOPWORDS = {
+    "เขียน", "ยังไง", "คืออะไร", "ใช้ยังไง", "อะไร", "ทำไม", "อย่างไร",
+    "หน่อย", "ด้วย", "ครับ", "ค่ะ", "นะ", "บ้าง", "ได้", "ให้", "แบบ",
+    "ตัวอย่าง", "วิธี", "การ", "ของ", "ที่", "เป็น", "มี", "ใน",
+    "กับ", "และ", "หรือ", "แต่", "จะ", "ก็", "แล้ว", "จาก", "โดย",
+}
 
 PY_KEYWORDS = {
     "if", "else", "elif", "for", "while", "def", "class", "return",
@@ -85,7 +93,7 @@ def load_qa(xlsx_path: str) -> list[dict]:
 
 
 def _score(query: str, text: str) -> float:
-    q_words = set(re.findall(r"\w+", query.lower()))
+    q_words = set(re.findall(r"\w+", query.lower())) - THAI_STOPWORDS
     t_words = set(re.findall(r"\w+", text.lower()))
     score = float(len(q_words & t_words))
 
