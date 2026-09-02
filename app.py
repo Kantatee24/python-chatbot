@@ -26,10 +26,8 @@ SAFETY_SETTINGS = [
 ]
 
 CHAT_CONFIG = types.GenerateContentConfig(
-    temperature=0.2,
-    top_p=0.95,
-    top_k=64,
-    max_output_tokens=1024,
+    temperature=0.0,
+    max_output_tokens=2048,
     system_instruction=PROMPT_PYBOT,
     safety_settings=SAFETY_SETTINGS,
 )
@@ -91,11 +89,15 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
 
     history.insert(0, types.Content(
         role="user",
-        parts=[types.Part(text=f"[เนื้อหาที่เกี่ยวข้องจากหนังสือ Python MSU]\n{relevant_context}")]
+        parts=[types.Part(text=(
+            f"[เนื้อหาจากหนังสือ Python MSU — ใช้เฉพาะเนื้อหานี้ในการตอบเท่านั้น ห้ามเพิ่มเติมจากแหล่งอื่น]\n\n"
+            f"{relevant_context}\n\n"
+            f"[สิ้นสุดเนื้อหาจากหนังสือ]"
+        ))]
     ))
     history.insert(1, types.Content(
         role="model",
-        parts=[types.Part(text="รับทราบครับ พร้อมตอบคำถามครับ")]
+        parts=[types.Part(text="รับทราบครับ จะตอบโดยใช้เฉพาะเนื้อหาจากหนังสือที่ให้มาเท่านั้นครับ")]
     ))
 
     with st.spinner("กำลังคิด..."):
