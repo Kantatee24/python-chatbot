@@ -37,7 +37,7 @@ BASE_DIR = os.path.dirname(__file__)
 
 @st.cache_data(show_spinner="กำลังโหลดหนังสือ Python...")
 def get_chunks():
-    return load_chunks(os.path.join(BASE_DIR, "python_data.txt"))
+    return load_chunks(os.path.join(BASE_DIR, "python_data.md"))
 
 
 @st.cache_data(show_spinner="กำลังโหลด Q&A...")

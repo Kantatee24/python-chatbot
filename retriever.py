@@ -4,20 +4,31 @@ from pathlib import Path
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 80
-PDF_TOP_K = 2
+PDF_TOP_K = 3
 EXCEL_TOP_K = 3
 
 
-def load_chunks(txt_path: str) -> list[str]:
-    text = Path(txt_path).read_text(encoding="utf-8")
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    words = text.split()
+def load_chunks(md_path: str) -> list[str]:
+    """Split Markdown by headings first, then by word count if section too long."""
+    text = Path(md_path).read_text(encoding="utf-8")
+
+    # Split on Markdown headings (# ## ###)
+    raw_sections = re.split(r'\n(?=#{1,3} )', text)
+
     chunks = []
-    i = 0
-    while i < len(words):
-        chunk = " ".join(words[i : i + CHUNK_SIZE])
-        chunks.append(chunk)
-        i += CHUNK_SIZE - CHUNK_OVERLAP
+    for section in raw_sections:
+        section = section.strip()
+        if not section:
+            continue
+        words = section.split()
+        if len(words) <= CHUNK_SIZE:
+            chunks.append(section)
+        else:
+            i = 0
+            while i < len(words):
+                chunks.append(" ".join(words[i : i + CHUNK_SIZE]))
+                i += CHUNK_SIZE - CHUNK_OVERLAP
+
     return chunks
 
 
@@ -79,5 +90,5 @@ def search(query: str, chunks: list[str], qa_rows: list[dict]) -> str:
     if qa_result:
         parts.append(f"[จาก Q&A Excel]\n{qa_result}")
     if pdf_result:
-        parts.append(f"[จากหนังสือ PDF]\n{pdf_result}")
+        parts.append(f"[จากหนังสือ Markdown]\n{pdf_result}")
     return "\n\n===\n\n".join(parts)
