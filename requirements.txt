@@ -1,6 +1,5 @@
 streamlit
-google-genai
-PyPDF2
+google-genai>=1.0.0
 python-dotenv
 pandas
 openpyxl
