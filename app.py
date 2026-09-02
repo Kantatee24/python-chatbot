@@ -35,18 +35,20 @@ CHAT_CONFIG = types.GenerateContentConfig(
 BASE_DIR = os.path.dirname(__file__)
 
 
-def expand_query(query: str) -> str:
-    """ใช้ Gemini แปลง query เป็น keywords เพิ่มเติมสำหรับค้นหา"""
+def expand_query(query: str, chunks: list, qa_rows: list) -> str:
+    """ค้นหาเบื้องต้นก่อน แล้วให้ Gemini ดึง 2-3 keyword จากเนื้อหาในหนังสือ"""
     try:
+        initial_context = search(query, chunks, qa_rows)
         result = client.models.generate_content(
             model="gemini-3.5-flash-lite",
             contents=(
-                f'จากคำถาม: "{query}"\n'
-                f"สร้าง keywords ภาษาไทยและอังกฤษที่เกี่ยวข้อง 8-12 คำ "
-                f"ที่น่าจะปรากฏในหนังสือสอน Python เช่น ชื่อคำสั่ง ชื่อแนวคิด คำอธิบาย\n"
+                f"เนื้อหาจากหนังสือ Python MSU:\n{initial_context[:1500]}\n\n"
+                f"คำถาม: {query}\n\n"
+                f"จากเนื้อหาข้างต้นเท่านั้น ดึง keywords ที่มีในเนื้อหานั้น 2-3 คำ "
+                f"เพื่อช่วยค้นหาส่วนที่เกี่ยวข้องมากขึ้น\n"
                 f"ตอบเฉพาะ keywords คั่นด้วย space เท่านั้น ห้ามอธิบาย"
             ),
-            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=80),
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=20),
         )
         keywords = result.text.strip().replace("\n", " ")
         return f"{query} {keywords}"
@@ -99,7 +101,7 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     st.session_state["messages"].append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    expanded = expand_query(user_input)
+    expanded = expand_query(user_input, chunks, qa_rows)
     relevant_context = search(expanded, chunks, qa_rows)
 
     history = []
