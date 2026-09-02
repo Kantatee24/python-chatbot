@@ -35,6 +35,25 @@ CHAT_CONFIG = types.GenerateContentConfig(
 BASE_DIR = os.path.dirname(__file__)
 
 
+def normalize_query(query: str) -> str:
+    """แก้ typo และแปลง query เป็น Python keyword ที่ถูกต้อง"""
+    try:
+        result = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=(
+                f"คำถามเกี่ยวกับ Python: '{query}'\n"
+                f"งาน: แก้ typo และดึง Python keyword หลักออกมา\n"
+                f"ตัวอย่าง: 'while lopp' → 'while loop', 'deff ฟังก์ชัน' → 'def function'\n"
+                f"ตอบเฉพาะ keywords ที่แก้แล้ว 1-4 คำ คั่นด้วย space ห้ามอธิบาย"
+            ),
+            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=20),
+        )
+        normalized = result.text.strip().replace("\n", " ")
+        return f"{query} {normalized}"
+    except Exception:
+        return query
+
+
 def expand_query(query: str, chunks: list, heading_index: list, qa_rows: list) -> str:
     """ค้นหาเบื้องต้นก่อน แล้วให้ Gemini ดึง 2-3 keyword จากเนื้อหาในหนังสือ"""
     try:
@@ -107,7 +126,8 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
     st.session_state["messages"].append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    expanded = expand_query(user_input, chunks, heading_index, qa_rows)
+    normalized = normalize_query(user_input)
+    expanded = expand_query(normalized, chunks, heading_index, qa_rows)
     relevant_context = search(expanded, chunks, heading_index, qa_rows)
 
     history = []
