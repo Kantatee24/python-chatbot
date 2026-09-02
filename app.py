@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
 from prompt import PROMPT_PYBOT
-from retriever import load_chunks, load_qa, build_heading_index, search
+import numpy as np
+from retriever import load_chunks, load_qa, load_embeddings, build_heading_index, search
 
 load_dotenv()
 
@@ -93,6 +94,19 @@ def get_heading_index():
     return build_heading_index(get_chunks())
 
 
+@st.cache_data(show_spinner=False)
+def get_embeddings():
+    return load_embeddings(os.path.join(BASE_DIR, "embeddings.npy"))
+
+
+def embed_query(text: str) -> np.ndarray:
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=text[:2000],
+    )
+    return np.array(result.embeddings[0].values, dtype=np.float32)
+
+
 def clear_history():
     st.session_state["messages"] = [
         {"role": "model", "content": "สวัสดีครับ! ผม PyBot ผู้ช่วยเรียน Python จากหนังสือ Python MSU ครับ สอบถามเรื่องใดได้เลยครับ 🐍"}
@@ -116,6 +130,7 @@ with st.sidebar:
 chunks = get_chunks()
 qa_rows = get_qa()
 heading_index = get_heading_index()
+embeddings = get_embeddings()
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
@@ -131,7 +146,8 @@ if user_input := st.chat_input("ถามเรื่อง Python ได้เ�
 
     normalized = normalize_query(user_input)
     expanded = expand_query(normalized, chunks, heading_index, qa_rows)
-    relevant_context = search(expanded, chunks, heading_index, qa_rows)
+    relevant_context = search(expanded, chunks, heading_index, qa_rows,
+                              embeddings=embeddings, embed_fn=embed_query)
 
     history = []
     for msg in st.session_state["messages"][:-1]:

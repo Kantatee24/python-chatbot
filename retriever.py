@@ -1,4 +1,5 @@
 import re
+import numpy as np
 import pandas as pd
 from pathlib import Path
 
@@ -63,6 +64,13 @@ def build_heading_index(chunks: list[str]) -> list[dict]:
     return index
 
 
+def load_embeddings(path: str) -> np.ndarray | None:
+    try:
+        return np.load(path)
+    except Exception:
+        return None
+
+
 def load_qa(xlsx_path: str) -> list[dict]:
     df = pd.read_excel(xlsx_path).fillna("")
     rows = []
@@ -113,11 +121,29 @@ def search_qa(query: str, qa_rows: list[dict], top_k: int = EXCEL_TOP_K) -> str:
     return "\n\n".join(parts)
 
 
-def search_pdf(query: str, chunks: list[str], heading_index: list[dict],
-               top_k: int = PDF_TOP_K) -> str:
-    clean_q = clean_thai(query)
+def _semantic_search(query_vec: np.ndarray, embeddings: np.ndarray,
+                     chunks: list[str], top_k: int) -> list[str]:
+    norms = np.linalg.norm(embeddings, axis=1) * np.linalg.norm(query_vec)
+    sims = np.dot(embeddings, query_vec) / (norms + 1e-9)
+    top_idx = np.argsort(sims)[::-1][:top_k]
+    return [chunks[i] for i in top_idx]
 
-    # 1. ค้นหา heading ก่อน (precision สูง)
+
+def search_pdf(query: str, chunks: list[str], heading_index: list[dict],
+               top_k: int = PDF_TOP_K,
+               embeddings: np.ndarray | None = None,
+               embed_fn=None) -> str:
+
+    if embeddings is not None and embed_fn is not None and len(embeddings) == len(chunks):
+        try:
+            query_vec = embed_fn(clean_thai(query))
+            result = _semantic_search(query_vec, embeddings, chunks, top_k)
+            return "\n\n---\n\n".join(result)
+        except Exception:
+            pass  # fall through to keyword search
+
+    # keyword fallback
+    clean_q = clean_thai(query)
     h_scores = [(round(_score(clean_q, h["heading"]), 2), h["chunk_idx"])
                 for h in heading_index]
     h_scores.sort(reverse=True)
@@ -130,22 +156,22 @@ def search_pdf(query: str, chunks: list[str], heading_index: list[dict],
         if len(heading_chunks) >= 2:
             break
 
-    # 2. ค้นหา chunk ทั่วไป (recall สูง)
     c_scores = [(round(_score(clean_q, c), 2), i) for i, c in enumerate(chunks)]
     c_scores.sort(reverse=True)
     extra = [chunks[i] for s, i in c_scores if s > 0 and i not in seen][: top_k - len(heading_chunks)]
-
     result = heading_chunks + extra
     if not result:
         result = [chunks[i] for _, i in c_scores[:2]]
-
     return "\n\n---\n\n".join(result)
 
 
 def search(query: str, chunks: list[str], heading_index: list[dict],
-           qa_rows: list[dict]) -> str:
+           qa_rows: list[dict],
+           embeddings: np.ndarray | None = None,
+           embed_fn=None) -> str:
     qa_result = search_qa(query, qa_rows)
-    pdf_result = search_pdf(query, chunks, heading_index)
+    pdf_result = search_pdf(query, chunks, heading_index,
+                            embeddings=embeddings, embed_fn=embed_fn)
     parts = []
     if qa_result:
         parts.append(f"[จาก Q&A Excel]\n{qa_result}")
